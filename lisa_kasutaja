@@ -1,0 +1,32 @@
+
+#!/bin/bash
+
+# Kontrollime, kas kasutajanimi anti parameetrina
+if [ "$#" -ne 1 ]; then
+    echo "Kasutamine: $0 kasutajanimi"
+    exit 1
+fi
+
+KASUTAJA="$1"
+
+# Kontrollime, et skripti käivitab root, mitte sudo kaudu
+if [ "$EUID" -ne 0 ]; then
+    echo "Viga: käivita skript root-kasutajana."
+    exit 1
+fi
+
+# Kontrollime, kas kasutaja on juba olemas
+if id "$KASUTAJA" >/dev/null 2>&1; then
+    echo "Viga: kasutaja $KASUTAJA on juba olemas."
+    exit 1
+fi
+
+# Loome kasutaja ja kodukataloogi koos vaikimisi failidega
+useradd -m -d "/home/$KASUTAJA" -s /bin/bash "$KASUTAJA"
+
+if [ "$?" -eq 0 ]; then
+    echo "Kasutaja $KASUTAJA loodud edukalt."
+else
+    echo "Viga: kasutaja loomine ebaõnnestus."
+    exit 1
+fi

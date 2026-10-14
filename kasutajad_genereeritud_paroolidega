@@ -1,0 +1,76 @@
+
+#!/bin/bash
+
+# Kontrollime parameetreid
+if [ "$#" -ne 1 ]; then
+    echo "Kasutamine: $0 kasutajate_fail"
+    exit 1
+fi
+
+# Kontrollime root-õigusi
+if [ "$EUID" -ne 0 ]; then
+    echo "Viga: käivita skript root-kasutajana."
+    exit 1
+fi
+
+FAIL="$1"
+LOGI="loodud_kasutajad_paroolidega"
+
+# Kontrollime sisendfaili
+if [ ! -f "$FAIL" ] || [ ! -r "$FAIL" ]; then
+    echo "Viga: faili $FAIL ei leitud või seda ei saa lugeda."
+    exit 1
+fi
+
+# Kontrollime parooligeneraatori olemasolu
+if ! command -v pwgen >/dev/null 2>&1; then
+    echo "Viga: pwgen puudub. Paigalda: apt install pwgen"
+    exit 1
+fi
+
+# Kaitseme paroolide logifaili
+umask 077
+touch "$LOGI" || exit 1
+chmod 600 "$LOGI" || exit 1
+
+while IFS= read -r KASUTAJA || [ -n "$KASUTAJA" ]; do
+    [ -z "$KASUTAJA" ] && continue
+
+    if id "$KASUTAJA" >/dev/null 2>&1; then
+        echo "Viga: kasutaja $KASUTAJA on juba olemas."
+        continue
+    fi
+
+    # Genereerime 8 väikest tähte sisaldava parooli
+    PAROOL=$(pwgen -s -A -0 8 1) || {
+        echo "Viga: parooli genereerimine ebaõnnestus."
+        continue
+    }
+
+    if [ "${#PAROOL}" -ne 8 ]; then
+        echo "Viga: genereeritud parooli pikkus pole 8."
+        continue
+    fi
+
+    # Loome kasutaja kodukataloogi ja Bash-shelliga
+    if ! useradd -m -d "/home/$KASUTAJA" -s /bin/bash "$KASUTAJA"; then
+        echo "Viga: kasutaja $KASUTAJA loomine ebaõnnestus."
+        continue
+    fi
+
+    # Määrame parooli
+    if ! printf '%s:%s\n' "$KASUTAJA" "$PAROOL" | chpasswd; then
+        echo "Viga: kasutaja $KASUTAJA parooli määramine ebaõnnestus."
+        passwd -l "$KASUTAJA"
+        continue
+    fi
+
+    # Salvestame kasutajanime ja parooli logisse
+    if printf '%s:%s\n' "$KASUTAJA" "$PAROOL" >> "$LOGI"; then
+        echo "Kasutaja $KASUTAJA loodud, parool määratud ja logitud."
+    else
+        echo "Viga: logimine ebaõnnestus kasutajale $KASUTAJA."
+        passwd -l "$KASUTAJA"
+    fi
+
+done < "$FAIL"

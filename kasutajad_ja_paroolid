@@ -1,0 +1,60 @@
+
+#!/bin/bash
+
+if [ "$#" -ne 2 ]; then
+    echo "Kasutamine: $0 kasutajate_fail paroolide_fail"
+    exit 1
+fi
+
+if [ "$EUID" -ne 0 ]; then
+    echo "Viga: käivita skript root-kasutajana."
+    exit 1
+fi
+
+KASUTAJATE_FAIL="$1"
+PAROOLIDE_FAIL="$2"
+
+if [ ! -f "$KASUTAJATE_FAIL" ] || [ ! -f "$PAROOLIDE_FAIL" ]; then
+    echo "Viga: üks või mõlemad failid puuduvad."
+    exit 1
+fi
+
+exec 3< "$KASUTAJATE_FAIL"
+exec 4< "$PAROOLIDE_FAIL"
+
+while IFS= read -r KASUTAJA <&3 || [ -n "$KASUTAJA" ]; do
+    IFS= read -r PAROOL <&4 || [ -n "$PAROOL" ] || {
+        echo "Viga: paroolide failis pole igale kasutajale parooli."
+        exit 1
+    }
+
+    if [ -z "$KASUTAJA" ] || [ -z "$PAROOL" ]; then
+        echo "Viga: tühi kasutajanimi või parool."
+        exit 1
+    fi
+
+    if id "$KASUTAJA" >/dev/null 2>&1; then
+        echo "Viga: kasutaja $KASUTAJA on juba olemas."
+        exit 1
+    fi
+
+    if ! useradd -m -d "/home/$KASUTAJA" -s /bin/bash "$KASUTAJA"; then
+        echo "Viga: kasutaja $KASUTAJA loomine ebaõnnestus."
+        exit 1
+    fi
+
+    if ! printf '%s:%s\n' "$KASUTAJA" "$PAROOL" | chpasswd; then
+        echo "Viga: parooli määramine ebaõnnestus."
+        exit 1
+    fi
+
+    echo "Kasutaja $KASUTAJA loodud ja parool määratud."
+done
+
+if IFS= read -r LISAPAROOL <&4; then
+    echo "Viga: paroolide failis on kasutajatega võrreldes lisaridu."
+    exit 1
+fi
+
+exec 3<&-
+exec 4<&-

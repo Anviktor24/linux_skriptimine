@@ -1,0 +1,24 @@
+
+#!/bin/bash
+
+if [ "$#" -ne 1 ]; then
+    echo "Kasutamine: $0 failinimi"
+    exit 1
+fi
+
+if [ "$EUID" -ne 0 ]; then
+    echo "Viga: käivita skript root-kasutajana."
+    exit 1
+fi
+
+FAIL="$1"
+
+if [ ! -f "$FAIL" ]; then
+    echo "Viga: faili $FAIL ei leitud."
+    exit 1
+fi
+
+while IFS= read -r KASUTAJA || [ -n "$KASUTAJA" ]; do
+    [ -z "$KASUTAJA" ] && continue
+    ./lisa_kasutaja "$KASUTAJA" || exit 1
+done < "$FAIL"
